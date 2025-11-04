@@ -1,13 +1,25 @@
 {
   "name": "my-shorts-backend",
+<<<<<<< HEAD
   "version": "1.0.0",
   "main": "server.js",
+=======
+  "private": true,
+>>>>>>> f236d36 (fix: package.json and axios install)
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+<<<<<<< HEAD
     "express": "^4.18.2",
     "cors": "^2.8.5"
+=======
+    "axios": "^1.13.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "youtube-transcript": "^1.1.4",
+    "yt-search": "^2.10.7"
+>>>>>>> f236d36 (fix: package.json and axios install)
   }
 }
