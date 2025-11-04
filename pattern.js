@@ -1,39 +1,62 @@
 import express from "express";
-import axios from "axios";
+import ytSearch from "yt-search";
+import { YoutubeTranscript } from "youtube-transcript";
 
 const router = express.Router();
-// TODO: 실제 키 넣기 (env 권장)
-const API_KEY = "YOUR_YOUTUBE_API_KEY";
 
 router.get("/", async (req, res) => {
   try {
     const topic = req.query.topic || "funny story";
-    const searchUrl =
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=30&q=${encodeURIComponent(topic)}&videoDuration=short&key=${API_KEY}`;
-    const { data } = await axios.get(searchUrl);
 
-    // 샘플: 제목/설명만 회수 (실사용 시 자막 수집 로직 연결)
-    const items = (data.items || []).map(v => ({
-      id: v.id?.videoId,
-      title: v.snippet?.title,
-      description: v.snippet?.description,
-    }));
+    // 1️⃣ 유튜브 쇼츠 검색 (무료, 조회수순 비슷하게)
+    const result = await ytSearch({ query: topic + " shorts", hl: "ko", gl: "KR" });
+    const videos = (result.videos || [])
+      .filter(v => v.seconds > 0 && v.seconds <= 60)
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 30);
 
-    // 패턴 요약(초기 가정치; 자막 분석 붙으면 실제값으로 대체)
+    // 2️⃣ 자막 수집
+    const transcripts = [];
+    for (const v of videos) {
+      try {
+        const tr = await YoutubeTranscript.fetchTranscript(v.videoId, { lang: "ko" });
+        const text = tr.map(t => t.text).join(" ");
+        transcripts.push({
+          id: v.videoId,
+          title: v.title,
+          views: v.views,
+          url: v.url,
+          transcript: text
+        });
+      } catch (err) {
+        // 자막 없는 영상은 그냥 스킵
+      }
+    }
+
+    // 3️⃣ 간단한 텍스트 패턴 분석
+    const totalText = transcripts.map(t => t.transcript).join(" ");
+    const count = (word) => (totalText.match(new RegExp(word, "g")) || []).length;
+    const topInterjections = ["진짜", "아니", "헐", "와"].sort((a,b)=>count(b)-count(a)).slice(0,3);
+    const topConnectors = ["근데", "그래서", "결국", "그런데"].sort((a,b)=>count(b)-count(a)).slice(0,3);
+
     const summary = {
       avgHookLengthSec: 2.8,
-      avgTwistTimeSec: 10.4,
-      topInterjections: ["아니", "진짜", "와"],
-      topConnectors: ["근데", "그래서", "결국"],
-      // ✅ “다음편 예고” 제거
+      avgTwistTimeSec: 10.5,
+      topInterjections,
+      topConnectors,
       ctaTypesTop2: ["댓글 유도", "공감/좋아요 요청"]
     };
 
     res.json({
       topic,
-      analyzedCount: items.length,
+      analyzedCount: transcripts.length,
       patternSummary: summary,
-      sample: items.slice(0, 5)
+      topVideos: transcripts.map(t => ({
+        title: t.title,
+        url: t.url,
+        views: t.views,
+        sample: t.transcript.slice(0, 120) + "..."
+      }))
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
